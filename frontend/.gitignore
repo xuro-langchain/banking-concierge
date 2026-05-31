@@ -1,5 +1,7 @@
 node_modules/
-dist/
+# `dist/` is deliberately NOT ignored: the parent project's `langgraph deploy`
+# uploads everything not gitignored, and the FastAPI custom routes serve
+# `frontend/dist/` at /concierge/ on the deployment. Keep the bundle tracked.
 .env
 .env.local
 *.log

@@ -1,9 +1,10 @@
-# Python-generated files
+# Python-generated files (anchored to repo root; otherwise `dist/` would
+# also match frontend/dist/, which langgraph deploy needs to ship).
 __pycache__/
 *.py[oc]
-build/
-dist/
-wheels/
+/build/
+/dist/
+/wheels/
 *.egg-info
 
 # Virtual environments
