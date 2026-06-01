@@ -13,6 +13,8 @@ to cluster after the load generator runs:
 
 from __future__ import annotations
 
+import re
+
 from langchain_core.tools import tool
 
 from concierge.mock_data import (
@@ -129,10 +131,51 @@ def transfer_funds(from_account: str, to_account: str, amount: float) -> dict:
     }
 
 
+_CUSTOMER_ID_RE = re.compile(r"^CUST-\d{4}$")
+_LAST4_RE = re.compile(r"^\d{4}$")
+_EXP_RE = re.compile(r"^\d{2}/\d{2}$")
+
+
+@tool
+def verify_card_on_file(customer_id: str, last4: str, exp: str) -> dict:
+    """Verify a card on file by last-4 and expiration; never accepts full PAN or CVV."""
+    if not _CUSTOMER_ID_RE.match(customer_id):
+        raise ValueError(
+            f"customer_id must match CUST-####. Got {customer_id!r}."
+        )
+    if not _LAST4_RE.match(last4):
+        raise ValueError(
+            "last4 must be exactly 4 digits. Do not pass the full card number."
+        )
+    if not _EXP_RE.match(exp):
+        raise ValueError("exp must be in MM/YY format.")
+    customer = CUSTOMERS.get(customer_id)
+    if customer is None:
+        raise ValueError(
+            f"No customer found with ID {customer_id!r}. "
+            "Customer IDs are in the format CUST-####."
+        )
+    cards = customer.get("credit_cards") or []
+    if not cards:
+        return {"match": False, "reason": "no_card_on_file"}
+    last4_hit = False
+    for card in cards:
+        stored_digits = re.sub(r"\D", "", str(card.get("number", "")))
+        if stored_digits[-4:] != last4:
+            continue
+        last4_hit = True
+        if str(card.get("exp", "")) == exp:
+            return {"match": True}
+    if last4_hit:
+        return {"match": False, "reason": "exp_mismatch"}
+    return {"match": False, "reason": "last4_mismatch"}
+
+
 TOOLS = [
     search_banking_docs,
     account_lookup,
     recent_transactions,
     find_branch,
     transfer_funds,
+    verify_card_on_file,
 ]
