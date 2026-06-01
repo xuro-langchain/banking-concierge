@@ -60,7 +60,19 @@ def account_lookup(customer_id: str) -> dict:
             f"No customer found with ID {customer_id!r}. "
             "Customer IDs are in the format CUST-####."
         )
-    return dict(customer)
+    record = dict(customer)
+    # Redact PCI/PII at the tool boundary so the model never sees full values.
+    ssn = record.get("ssn", "")
+    record["ssn"] = "***-**-" + ssn[-4:] if ssn else ssn
+    record["credit_cards"] = [
+        {
+            **c,
+            "number": "**** **** **** " + c["number"].replace(" ", "")[-4:],
+            "cvv": "***",
+        }
+        for c in record.get("credit_cards", [])
+    ]
+    return record
 
 
 @tool
