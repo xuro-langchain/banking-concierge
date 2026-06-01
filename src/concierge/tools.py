@@ -13,6 +13,8 @@ to cluster after the load generator runs:
 
 from __future__ import annotations
 
+import re
+
 from langchain_core.tools import tool
 
 from concierge.mock_data import (
@@ -44,12 +46,15 @@ def search_banking_docs(query: str, k: int = 4) -> str:
 
 @tool
 def account_lookup(customer_id: str) -> dict:
-    """Look up account information.
-
-    Returns the customer's name and a list of their account IDs, account
-    types, and balances. Use this when the user wants details about an
-    account.
-    """
+    """Look up account information by Meridian customer ID. customer_id MUST match CUST-####; if the rep only has an SSN/phone/email/card, call find_customer_by_identifier first to resolve the ID, then call this. Never pass an SSN, phone, or card number here."""
+    if not re.fullmatch(r"CUST-\d{4}", customer_id):
+        raise ValueError(
+            f"customer_id must be in the format CUST-#### (e.g. CUST-0001). "
+            f"Got {customer_id!r}. If you only have an SSN, phone, email, or "
+            "card on file, call find_customer_by_identifier first to resolve "
+            "the CUST-#### id, then call account_lookup. Do not guess or "
+            "enumerate customer IDs."
+        )
     if customer_id.startswith("X"):
         raise RuntimeError(
             "Customer record service is temporarily unavailable. Try again later."
@@ -61,6 +66,49 @@ def account_lookup(customer_id: str) -> dict:
             "Customer IDs are in the format CUST-####."
         )
     return dict(customer)
+
+
+@tool
+def find_customer_by_identifier(identifier_type: str, value: str) -> dict:
+    """Resolve a CUST-#### customer ID from an SSN, phone, email, or card last-4. identifier_type must be one of 'ssn', 'phone', 'email', 'card_last4'."""
+    allowed = {"ssn", "phone", "email", "card_last4"}
+    if identifier_type not in allowed:
+        raise ValueError(
+            f"identifier_type must be one of {sorted(allowed)}. "
+            f"Got {identifier_type!r}."
+        )
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("value must be a non-empty string.")
+
+    needle = value.strip()
+    if identifier_type == "phone":
+        needle_norm = re.sub(r"\D", "", needle)
+    elif identifier_type == "email":
+        needle_norm = needle.lower()
+    else:
+        needle_norm = needle
+
+    matches: list[str] = []
+    for cust_id, customer in CUSTOMERS.items():
+        if identifier_type == "ssn":
+            if customer["ssn"] == needle_norm:
+                matches.append(cust_id)
+        elif identifier_type == "phone":
+            if re.sub(r"\D", "", customer["phone"]) == needle_norm:
+                matches.append(cust_id)
+        elif identifier_type == "email":
+            if customer["email"].lower() == needle_norm:
+                matches.append(cust_id)
+        elif identifier_type == "card_last4":
+            for card in customer.get("credit_cards", []):
+                digits = re.sub(r"\D", "", card.get("number", ""))
+                if digits.endswith(needle_norm):
+                    matches.append(cust_id)
+                    break
+
+    if len(matches) == 1:
+        return {"customer_id": matches[0]}
+    return {"customer_id": None, "match_count": len(matches)}
 
 
 @tool
@@ -132,6 +180,7 @@ def transfer_funds(from_account: str, to_account: str, amount: float) -> dict:
 TOOLS = [
     search_banking_docs,
     account_lookup,
+    find_customer_by_identifier,
     recent_transactions,
     find_branch,
     transfer_funds,

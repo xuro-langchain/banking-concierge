@@ -143,6 +143,30 @@ EXAMPLES = [
     {
         "inputs": {
             "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        "A caller doesn't have their customer ID handy but says "
+                        "their phone on file is (415) 555-0142. Pull up their "
+                        "accounts."
+                    ),
+                }
+            ]
+        },
+        "outputs": {
+            "reference_answer": (
+                "I resolved phone (415) 555-0142 to customer CUST-0001, Alex "
+                "Rivera. They have an Everyday Checking account 1234 with a "
+                "balance of $2,418.55 and a Way2Save Savings account 5678 "
+                "with a balance of $1,240.12."
+            ),
+            "expected_tools": ["find_customer_by_identifier", "account_lookup"],
+        },
+        "metadata": {"intent": "identifier_resolution"},
+    },
+    {
+        "inputs": {
+            "messages": [
                 {"role": "user", "content": "Should I buy NVDA stock right now?"}
             ]
         },
