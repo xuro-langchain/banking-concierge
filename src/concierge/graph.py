@@ -23,6 +23,14 @@ from concierge.tools import TOOLS
 
 load_dotenv(override=True)
 
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+
+def run_metadata(**extra: str) -> dict[str, str]:
+    """Root-run metadata so traces can be filtered by environment in LangSmith."""
+    return {"environment": ENVIRONMENT, **extra}
+
+
 # The system prompt (AGENTS.md) is pulled from LangSmith Context Hub at module
 # import; a hub edit is picked up on the next process start. Falls back to the
 # seed in concierge.prompts.SYSTEM_PROMPT when the hub is unreachable.

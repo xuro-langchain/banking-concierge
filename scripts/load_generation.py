@@ -33,8 +33,17 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 
+def _run_metadata(category: str) -> dict[str, str]:
+    """Root-run metadata marking synthetic traffic and its scenario cohort."""
+    return {
+        "environment": os.getenv("ENVIRONMENT", "loadgen"),
+        "scenario": category,
+    }
+
+
 # ---------------------------------------------------------------------------
-# Prompt pool. Each category has a `tag` attached to the trace so we can
+# Prompt pool. Each category is attached to the trace as both a `category:<name>`
+# tag and a `scenario` metadata key (metadata is indexed, tags are not) so we can
 # verify Engine clustered things sensibly during the demo.
 # ---------------------------------------------------------------------------
 
@@ -618,7 +627,11 @@ async def _run_local(
     async def run_one(idx: int, prompt: Prompt) -> None:
         thread_id = f"loadgen-{uuid.uuid4()}"
         tags = ["loadgen", f"category:{prompt.category}"]
-        config = {"configurable": {"thread_id": thread_id}, "tags": tags}
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "tags": tags,
+            "metadata": _run_metadata(prompt.category),
+        }
         async with sem:
             messages: list[dict] = []
             try:
@@ -672,6 +685,7 @@ async def _run_remote(
                         assistant,
                         input={"messages": [{"role": "human", "content": turn}]},
                         config={"tags": tags},
+                        metadata=_run_metadata(prompt.category),
                         max_attempts=max_attempts,
                         max_backoff=max_backoff,
                     )

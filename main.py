@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-from concierge.graph import graph  # noqa: E402
+from concierge.graph import graph, run_metadata  # noqa: E402
 
 
 def main() -> None:
@@ -27,7 +27,10 @@ def main() -> None:
         if len(sys.argv) > 1
         else "What is the monthly fee on Everyday Checking?"
     )
-    result = graph.invoke({"messages": [{"role": "user", "content": question}]})
+    result = graph.invoke(
+        {"messages": [{"role": "user", "content": question}]},
+        config={"metadata": run_metadata()},
+    )
     print(result["messages"][-1].content)
 
 

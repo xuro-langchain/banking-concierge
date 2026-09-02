@@ -72,6 +72,7 @@ Required environment variables (see `.env.example`):
 | `LANGSMITH_PROJECT` | Tracing project for ad-hoc and loadgen runs |
 | `LANGSMITH_WORKSPACE_ID` | Workspace (tenant) the Context Hub repo is seeded into |
 | `CONCIERGE_MODEL` | _(optional)_ override the agent's chat model |
+| `ENVIRONMENT` | _(optional)_ `metadata.environment` on every root run; defaults to `development` (`loadgen` in `load_generation.py`) |
 | `LANGGRAPH_DEPLOYMENT_URL` | _(optional)_ deployment URL for `load_generation.py --mode remote` |
 
 ### Seed Context Hub (one-time)

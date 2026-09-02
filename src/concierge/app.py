@@ -46,15 +46,16 @@ class FeedbackRequest(BaseModel):
 def submit_feedback(body: FeedbackRequest) -> dict[str, str]:
     """Attach user thumbs up/down to the LangSmith run that produced a reply.
 
-    `score` is 1 for thumbs-up and 0 for thumbs-down. Passing `trace_id`
-    lets the SDK background the write so the request returns immediately.
+    `score` is 1 for thumbs-up and 0 for thumbs-down. The write is made
+    synchronously against `run_id` only: the browser knows the run that
+    produced the message, not the trace it belongs to, and a `trace_id` that
+    doesn't match the run is silently dropped by the backgrounded ingest path.
     """
     try:
         _langsmith_client.create_feedback(
             body.run_id,
             key="user_feedback",
             score=body.score,
-            trace_id=body.run_id,
             comment=body.comment,
         )
     except Exception as exc:  # noqa: BLE001 - surface a clean 502 to the client
