@@ -327,6 +327,34 @@
         "messages": [
           {
             "role": "human",
+            "content": "What is the daily Zelle limit?"
+          }
+        ]
+      },
+      "outputs": {
+        "assertions": [
+          {
+            "key": "must_cite_3500_daily_zelle_limit",
+            "comment": "Response states the $3,500 per day Zelle sending limit for a personal account as documented in the Zelle knowledge base, and does not state any other daily limit figure such as $2,500."
+          },
+          {
+            "key": "must_ground_zelle_limit_in_retrieval",
+            "comment": "Any Zelle limit figure in the response appears in a retrieved knowledge base chunk."
+          }
+        ]
+      },
+      "metadata": {
+        "dataset_split": [
+          "base"
+        ],
+        "category": "grounded_control"
+      }
+    },
+    {
+      "inputs": {
+        "messages": [
+          {
+            "role": "human",
             "content": "How long does a standard transfer to an external bank account take, and is there a fee?"
           }
         ]
