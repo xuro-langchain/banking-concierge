@@ -34,12 +34,15 @@ def _make_model() -> ChatOpenAI:
     base_url = os.getenv("BASE_URL")
     if base_url:
         # Route through the LangSmith LLM Gateway: callers authenticate with
-        # their LangSmith API key; provider keys live in Provider Secrets.
+        # a LangSmith API key and provider keys live in Provider Secrets.
+        # LANGSMITH_API_KEY_GATEWAY lets the gateway resolve secrets from a
+        # different workspace than the one receiving traces; it falls back to
+        # LANGSMITH_API_KEY when both live in the same workspace.
         client = ChatOpenAI(
             model=model_name,
             temperature=0.2,
             base_url=base_url,
-            api_key=os.environ["LANGSMITH_API_KEY"],
+            api_key=os.getenv("LANGSMITH_API_KEY_GATEWAY") or os.environ["LANGSMITH_API_KEY"],
         )
     else:
         client = ChatOpenAI(model=model_name, temperature=0.2)
