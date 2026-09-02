@@ -23,20 +23,22 @@ const ApiKeyGate: FC<Props> = ({ onSubmit }) => {
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[var(--background)] p-4">
+    <div className="anim-fade-in flex min-h-dvh items-center justify-center bg-[var(--background)] p-4">
       <form
         onSubmit={handle}
-        className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm"
+        className="surface-elevated w-full max-w-md rounded-2xl p-7"
       >
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)]">
+        <div className="mb-5 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--accent)] text-[var(--primary-foreground)] shadow-[0_0_28px_-6px_var(--primary)]">
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
               <path d="M12 2L2 12l10 10 10-10z" />
             </svg>
           </div>
-          <h1 className="text-base font-semibold">Connect to the deployment</h1>
+          <h1 className="text-base font-semibold tracking-tight">
+            Connect to the deployment
+          </h1>
         </div>
-        <p className="text-sm text-[var(--muted-foreground)]">
+        <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
           This deployment requires a LangSmith API key to call{" "}
           <code className="rounded bg-[var(--muted)] px-1 text-xs">
             /threads
@@ -62,12 +64,12 @@ const ApiKeyGate: FC<Props> = ({ onSubmit }) => {
           placeholder="lsv2_pt_…"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 font-mono text-sm outline-none placeholder:text-[var(--muted-foreground)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-bg)]"
+          className="focus-glow mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 font-mono text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]"
         />
         <button
           type="submit"
           disabled={value.trim().length === 0}
-          className="mt-4 w-full rounded-lg bg-[var(--primary)] py-2 text-sm font-medium text-[var(--primary-foreground)] disabled:opacity-50"
+          className="mt-5 w-full rounded-lg bg-[var(--primary)] py-2 text-sm font-medium text-[var(--primary-foreground)] transition-colors hover:bg-[var(--primary-hover)] disabled:opacity-50"
         >
           Save key and continue
         </button>

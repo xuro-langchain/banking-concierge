@@ -57,6 +57,38 @@ export const getCheckpointId = async (
   return null;
 };
 
+export type FeedbackScore = 0 | 1;
+
+/**
+ * Record a thumbs up/down against the LangSmith run that produced an
+ * assistant message. The browser only ever sends the `run_id` and score —
+ * the backend route (`/concierge-api/feedback`) calls the LangSmith SDK
+ * server-side so `LANGSMITH_API_KEY` is never exposed to the client.
+ *
+ * The same `X-Api-Key` used for the agent server gates this custom route on
+ * deployed hosts, so we forward it just like the SDK does.
+ */
+export const submitFeedback = async (
+  ctx: ChatApiContext,
+  params: { runId: string; score: FeedbackScore; comment?: string },
+): Promise<void> => {
+  const res = await fetch(new URL("/concierge-api/feedback", ctx.apiUrl), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(ctx.apiKey ? { "X-Api-Key": ctx.apiKey } : {}),
+    },
+    body: JSON.stringify({
+      run_id: params.runId,
+      score: params.score,
+      comment: params.comment,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Feedback request failed (${res.status})`);
+  }
+};
+
 export const sendMessage = (
   ctx: ChatApiContext,
   params: {

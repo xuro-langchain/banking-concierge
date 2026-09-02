@@ -11,6 +11,14 @@ __pycache__/
 .venv
 
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+credentials.json
+node_modules/
+.DS_Store
 
 # LangGraph CLI runtime state
 .langgraph_api/

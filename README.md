@@ -4,36 +4,62 @@ A demo personal-banking customer service agent built to show off **LangSmith Eng
 
 The agent is intentionally a bit imperfect: the system prompt is under-specified and a few tools have rough edges, so when you run the load generator against it you get a healthy mix of clean traces, hallucinations, broken tool calls, scope-drifted answers, and over-retrieval loops. Engine clusters those into issues during the demo.
 
+The two headline bugs live on **two different fix surfaces**, so the demo shows both ways Engine recommends a fix:
+
+| Bug | Lives in | Effect | Engine fixes it by |
+|---|---|---|---|
+| "Answer rate questions from memory" instruction | **LangSmith Context Hub** (`banking-concierge-agent` / `AGENTS.md`) | ~40% ungrounded APY/APR answers | **Editing `AGENTS.md` in the Context Hub UI** — no code redeploy |
+| `account_lookup` returns unmasked PII | `src/concierge/tools.py` | SSN / card / CVV read back verbatim | **Opening a GitHub PR** against the connected repo |
+
+The agent's instructions are stored in Context Hub as a versioned `AGENTS.md` and pulled at runtime by `src/concierge/context.py:get_prompt()`. The repo keeps only that breadcrumb so Engine knows the prompt lives in the hub. Context Hub also holds a small library of show-only `SKILL.md` repos (the agent doesn't load them) to illustrate what a skills library looks like alongside the agent.
+
 ## What's in here
 
 ```
 src/concierge/
-  graph.py         StateGraph -> agent (LLM) <-> ToolNode
-  app.py           FastAPI custom routes (mounts the React UI at /concierge/)
-  state.py         MessagesState + retrieval_calls counter
-  prompts.py       Under-specified system prompt
-  tools.py         search_banking_docs + 4 mocked banking tools
-  retrieval.py     In-memory vector store over kb/*.md
-  mock_data.py     Fake customers, transactions, branches
-  kb/              ~20 synthetic banking FAQ markdown docs
+  graph.py                      StateGraph -> agent (LLM) <-> ToolNode
+  app.py                        FastAPI custom routes (mounts the React UI at /concierge/)
+  state.py                      MessagesState + retrieval_calls counter
+  context.py                    Pulls the system prompt (AGENTS.md) from LangSmith Context Hub at runtime
+  context_hub.py                Seeds the hub AGENTS.md + show-only SKILL.md repos
+  prompts.py                    Under-specified system prompt — seed pushed to the hub + offline fallback
+  tools.py                      search_banking_docs + 4 mocked banking tools
+  retrieval.py                  In-memory vector store over kb/*.md
+  mock_data.py                  Fake customers, transactions, branches
+  kb/                           ~20 synthetic banking FAQ markdown docs
 frontend/
-  src/             React + assistant-ui chat client (Vite + Tailwind v4)
+  src/                          React + assistant-ui chat client (Vite + Tailwind v4)
 scripts/
-  load_generation.py  Runs ~150 mixed conversations against the agent
+  load_generation.py            Runs ~150 mixed conversations against the agent
+  setup_context_hub.py          One-shot: seeds the hub with AGENTS.md + demo skills
+  teardown_context_hub.py       Delete context hub artifacts  
 evals/
-  golden_dataset.py   Creates a 7-example LangSmith dataset
-  evaluators.py       Hallucination + trajectory LLM-as-judge
-  run_experiment.py   `aevaluate(...)` runner
-langgraph.json       Deployment manifest (graphs + http.app) for LangSmith Cloud
+  evaluators.py                 LLM judges (hallucination, trajectory) + pii_leak_rate regex check
+  run_experiment.py             aevaluate(...) runner; pick golden / pii / hallucinations
+  dataset_snapshot.py           Export / restore datasets to/from committed JSON; pick golden / pii / hallucinations
+  dataset_golden.json           Committed snapshot of banking-concierge-golden
+  dataset_hallucinations.json   Committed snapshot of banking-concierge-hallucinations
+  dataset_pii.json              Committed snapshot of banking-concierge-pii
+langgraph.json                  Deployment manifest (graphs + http.app) for LangSmith Cloud
+rubric.md                       Annotation-queue rubric for human review of PII-flagged traces
 ```
 
 ## Setup
 
 Prerequisites: Python 3.13, [`uv`](https://docs.astral.sh/uv/), and a LangSmith account (Plus or above to deploy).
 
+### Fork the repo and use your own workspace (do this first)
+
+This demo connects LangSmith Engine to a GitHub repo, lets Engine open a PR against it, and creates datasets, a Context Hub repo, a tracing project, and a deployment all named `banking-concierge-*`. To avoid disturbing other people's demos:
+
+- **Fork [`langchain-samples/banking-concierge`](https://github.com/langchain-samples/banking-concierge)** into your own GitHub account or org and work from the fork. You'll connect Engine to **your fork**, so its auto-generated PII-fix PR lands on your fork instead of the shared upstream.
+- **Use your own LangSmith workspace.** The dataset names (`banking-concierge-golden` / `-hallucinations` / `-pii`), the Context Hub repo (`banking-concierge-agent`), the tracing project, and the deployment are all named by convention and will collide if several people run the demo in one shared workspace. Point `.env`'s `LANGSMITH_WORKSPACE_ID` (and your API keys) at your own workspace.
+
+Set the CI secrets (`OPENAI_API_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_WORKSPACE_ID`) on your fork too — see [Repeatable demo via GitHub Actions](#repeatable-demo-via-github-actions).
+
 ```bash
 uv sync
-cp .env.example .env   # already populated for this repo
+cp .env.example .env   # then point LANGSMITH_WORKSPACE_ID / API keys at your own workspace
 ```
 
 Required environment variables (see `.env.example`):
@@ -44,13 +70,31 @@ Required environment variables (see `.env.example`):
 | `LANGSMITH_API_KEY` | Tracing, datasets, experiments, deployment |
 | `LANGSMITH_TRACING` | `"true"` to send traces |
 | `LANGSMITH_PROJECT` | Tracing project for ad-hoc and loadgen runs |
+| `LANGSMITH_WORKSPACE_ID` | Workspace (tenant) the Context Hub repo is seeded into |
 | `CONCIERGE_MODEL` | _(optional)_ override the agent's chat model |
 | `LANGGRAPH_DEPLOYMENT_URL` | _(optional)_ deployment URL for `load_generation.py --mode remote` |
+
+### Seed Context Hub (one-time)
+
+The agent pulls its system prompt from LangSmith Context Hub, so seed the hub before the first run:
+
+```bash
+uv run python -m scripts.setup_context_hub
+```
+
+This creates the `banking-concierge-agent` agent repo (with the buggy `AGENTS.md`) and a few show-only `banking-concierge-*` skill repos, then tags the initial prompt commit as `production`. Until it's run, `get_prompt()` falls back to the seed in `prompts.py`, so the agent still works — but the "fix in Context Hub" demo beat needs the hub repo to exist.
+
+For a truly fresh demo rehearsal, delete and recreate those Context Hub artifacts so the prompt history starts clean:
+
+```bash
+uv run python -m scripts.teardown_context_hub --yes
+uv run python -m scripts.setup_context_hub
+```
 
 ## Run locally
 
 ```bash
-# one-time: build the React chat UI
+# one-time: build the custom chat UI (only needed for /concierge/, not for Studio)
 npm --prefix frontend install
 npm --prefix frontend run build
 
@@ -58,12 +102,20 @@ npm --prefix frontend run build
 uv run langgraph dev
 ```
 
-Two UIs are now served on `http://localhost:2024`:
+`langgraph dev` serves two separate UIs. Paste the full URL into your browser:
 
-- `/app/` — LangGraph Studio (built-in debugger)
-- `/concierge/` — the project's custom React chat UI (served by `src/concierge/app.py`)
+- **`http://localhost:2024/concierge/`** — the project's custom React chat UI (the main demo UI), served by `src/concierge/app.py` from `frontend/dist/`. This is what `npm run build` produces; until you build it, the page returns a 503 with a "run npm build" hint.
+- **`http://localhost:2024/app/`** — LangGraph Studio, the built-in debugger. Works with no frontend build.
 
-While iterating on the frontend you can run `npm --prefix frontend run dev` separately; the Vite dev server (`:5173`) proxies `/threads`, `/runs`, `/assistants`, `/info` to `localhost:2024`.
+`http://localhost:2024/` (the bare root) just redirects to `/concierge/`.
+
+**Iterating on the frontend?** Rebuilding on every change is slow, so run the Vite dev server in a second terminal instead:
+
+```bash
+npm --prefix frontend run dev   # hot-reloading UI on http://localhost:5173
+```
+
+Open `http://localhost:5173` (not `:2024`) — it live-reloads your React edits without a rebuild. The app still needs the agent backend, whose API lives on `:2024`, so Vite is configured (`frontend/vite.config.ts`) to **proxy** the agent endpoints (`/threads`, `/runs`, `/assistants`, `/info`) through to `localhost:2024`. Keep `uv run langgraph dev` running on `:2024` for that to work.
 
 ## Generate load (so Engine has data to cluster)
 
@@ -82,64 +134,62 @@ uv run python scripts/load_generation.py --mode remote --n 50 --only pii
 The PII pool covers two distinct paths:
 
 - `pii_leak` (and `pii_leak_multiturn`) — user *asks* the agent to read back PII; the leak appears in the agent's response. Exercises the response-side redaction.
-- `pii_in_user_input` (and `_multiturn`) — user *includes* real-looking PII in their message (SSNs, full card numbers + CVV + exp, names/ages/places). Most reliable trigger for incoming-message redaction policies, because the regex/ML matcher sees the values in the human turn before any tool runs. When redaction fires, the model receives placeholders like `SAFE_TO_USE:US_SSN_xxxx` instead of `552-19-4488`, which often causes the agent to misuse the placeholder downstream — useful as a secondary signal Engine can cluster on.
+- `pii_in_user_input` (and `_multiturn`) — user *includes* real-looking PII in their message (SSNs, full card numbers + CVV + exp, names/ages/places). Most reliable trigger for incoming-message redaction policies, because the regex/ML matcher sees the values in the human turn before any tool runs. When redaction fires, the model receives placeholders like `SAFE_TO_USE:US_SSN_xxxx` instead of `552-19-4488`, which often causes the agent to misuse the placeholder downstream — useful as a secondary signal Engine can cluster on. (This `SAFE_TO_USE:*` placeholder path only appears when the LangSmith LLM gateway is enabled. It's **off by default** — `BASE_URL` is unset — so a normal loadgen run won't produce placeholders unless you opt in; see the gateway section in `DEMO.md`.)
 
-Each run is tagged with `loadgen` and `category:<intent>` so you can verify Engine's clusters match the planted error modes (`hallucination_bait`, `broken_tool`, `out_of_scope`, `excessive_retrieval`, `pii_leak`).
+Each run is tagged with `loadgen` and `category:<intent>` so you can verify Engine's clusters match the planted error modes (`hallucination_bait`, `broken_tool`, `out_of_scope`, `excessive_retrieval`, `pii_leak`). The pool also includes token-cost drivers (`high_cost_long_multiturn`, `high_cost_redundant_lookup`) that feed the High-Cost Patterns Insights report — burst them with `--only high_cost`.
 
-## Build the golden dataset and run the offline experiment
+## Create the evaluation datasets
+
+Create these before running any experiment below — they're restored deterministically from committed JSON **snapshots** (`evals/dataset_golden.json` → `banking-concierge-golden`, `evals/dataset_hallucinations.json` → `banking-concierge-hallucinations`, `evals/dataset_pii.json` → `banking-concierge-pii`), so you do **not** have to wait for an Engine scan. `dataset_snapshot.py` is a small repo-local script wrapping the LangSmith SDK (not a built-in command); the positional `golden` / `hallucinations` / `pii` picks the dataset name and snapshot file, and `restore` reads the dataset name from inside the snapshot.
 
 ```bash
-uv run python evals/golden_dataset.py            # creates banking-concierge-golden in LangSmith
-uv run python evals/run_experiment.py            # runs aevaluate with 2 judges
+# restore each dataset from its committed snapshot (--reset deletes + rebuilds if present)
+uv run python evals/dataset_snapshot.py restore golden --reset
+uv run python evals/dataset_snapshot.py restore hallucinations --reset
+uv run python evals/dataset_snapshot.py restore pii --reset
 ```
 
-The experiment attaches two LLM-as-judge scores to each run:
+The committed snapshots are the **source of truth for setup**, so a rehearsal or CI run produces identical examples every time — no waiting on a ~20-minute Engine scan.
+
+## Run the offline experiment (golden dataset)
+
+```bash
+uv run python evals/run_experiment.py golden
+```
+
+`run_experiment.py` requires the dataset as a positional argument (`golden`, `pii`, or `hallucinations`); each choice selects its dataset name, evaluators, and experiment prefix. This runs `aevaluate` over `banking-concierge-golden`, attaching two LLM-as-judge scores to each run:
 
 - `hallucination` — a local LLM-as-judge (no openevals dependency), given the assistant's final answer plus the retrieved/tool-output context. Scores 1.0 when it detects an ungrounded claim and 0.0 when grounded, so the aggregate reads as a hallucination rate (higher is worse).
 - `trajectory_accuracy` — a local LLM-as-judge (no agentevals dependency) that grades the agent's actual tool-call trajectory against a reference synthesized from the example's `expected_tools`.
 
 ## Engine-issue regression demo
 
-When Engine promotes a failing prod trace into a dataset, it stores per-claim **assertions** instead of a single reference answer. `evals/run_engine_experiment.py` targets one such dataset (the "agent fabricates specific banking facts" hallucinations dataset by default) and runs two evaluators against it:
+When Engine promotes a failing prod trace into a dataset, the dataset becomes a regression suite for that issue. The same `evals/run_experiment.py` runner targets one such dataset when you pass `hallucinations` or `pii` (the "agent fabricates specific banking facts" dataset and the PII-leak dataset) and runs the matching evaluator against it:
 
-- `assertions_evaluator` — emits one feedback row per assertion (`must_not_state_2pm_pacific_for_domestic_wire`, `must_ground_cutoff_in_retrieval`, etc.) so the LangSmith UI shows per-claim pass/fail.
-- `hallucination_evaluator` — same aggregate hallucination score used elsewhere, for a single headline number.
+- `hallucination_evaluator` — the aggregate hallucination score used elsewhere, for a single headline number (1.0 = ungrounded, 0.0 = grounded; higher is worse). The PII dataset uses `pii_leak_rate` instead.
 
-```bash
-# Baseline before merging Engine's PR
-uv run python evals/run_engine_experiment.py
-
-# (merge Engine's PR, redeploy)
-
-# Same command — appears in LangSmith as a new experiment on the same dataset
-uv run python evals/run_engine_experiment.py
-```
-
-Open the two experiments side-by-side in LangSmith → Experiments to show per-assertion improvement. Point the runner at a different dataset with `--dataset <name-or-id>`.
-
-### Restore the Engine dataset after a wipe
-
-`evals/engine_dataset.py` exports and restores the Engine-generated dataset. Run `export` once to capture the assertions in `evals/engine_dataset.json` (committed to the repo). After wiping LangSmith for a rehearsal, `restore --reset` recreates the dataset under the same name with the exact same examples.
+Run the baseline for **both** headline issues before applying Engine's fixes:
 
 ```bash
-uv run python evals/engine_dataset.py export                # capture
-uv run python evals/engine_dataset.py restore --reset       # recreate after wipe
+# each positional choice selects its dataset, evaluator, and experiment prefix
+uv run python evals/run_experiment.py hallucinations
+uv run python evals/run_experiment.py pii
 ```
 
-This is optional — Engine will produce equivalent assertions on a fresh scan — but a committed snapshot guarantees the demo's per-assertion improvements look identical run to run.
+Then apply Engine's fix for each (Context Hub edit for the hallucination, GitHub PR for the PII leak), redeploy, and re-run the **same two commands** — each appears as a new experiment on its dataset. Open the before/after pair side-by-side in LangSmith → Experiments to watch the score improve.
 
 ### Repeatable demo via GitHub Actions
 
-For a repeatable on-stage demo where you don't want to redeploy the agent, `.github/workflows/evals-on-pr.yml` runs `run_engine_experiment.py` on every pull request. The workflow is a strategy matrix over every Engine-generated dataset, so each PR fires one parallel job per dataset (currently `banking-concierge-hallucinations` and `banking-concierge-pii`) and posts a separate PR comment per dataset linking to that experiment. Experiments are tagged with `pr_number`, `commit_sha`, `branch`, `ci_run_id`, and `engine_issue=<alias>`, and prefixed `<issue>-pr-<N>-<sha>` so they're easy to find later.
+For a repeatable on-stage demo where you don't want to redeploy the agent, `.github/workflows/evals-on-pr.yml` runs `run_experiment.py` on every pull request. The workflow is a strategy matrix over every Engine-generated dataset, so each PR fires one parallel job per dataset (currently `banking-concierge-hallucinations` and `banking-concierge-pii`) and posts a separate PR comment per dataset linking to that experiment. Experiments are tagged with `pr_number`, `commit_sha`, `branch`, `ci_run_id`, and `engine_issue=<alias>`, and prefixed `<issue>-pr-<N>-<sha>` so they're easy to find later.
 
 Why run both on every PR: when a PR fixes one issue, the other dataset's result lets you see whether the fix caused unintended cross-impact (improvement, neutral, or regression on the other issue). To add a new dataset, just append an entry to `strategy.matrix.include` in the workflow.
 
 Demo flow:
 
-1. Run the baseline locally on `main` once: `uv run python evals/run_engine_experiment.py`
+1. Run the baseline locally on `main` once: `uv run python evals/run_experiment.py hallucinations`
 2. Engine opens a PR with the proposed fix (or you open one with the fix applied).
 3. The workflow fires automatically, runs the experiment against the PR's code, and comments the LangSmith link on the PR.
-4. In LangSmith → Datasets → `banking-concierge-hallucinations` → Compare, pick the baseline experiment and the PR experiment to show per-assertion improvements without ever shipping the fix.
+4. In LangSmith → Datasets → `banking-concierge-hallucinations` → Compare, pick the baseline experiment and the PR experiment to show the score improvement without ever shipping the fix.
 
 Required GitHub configuration:
 
@@ -169,10 +219,11 @@ The key is sent as `X-Api-Key` on every SDK call. It is client-side credentials 
 Once deployed:
 
 1. In LangSmith, open the tracing project and **enable Engine**.
-2. Set priorities to "Tool Call Failures", "Hallucinations", and "Out-of-Scope". Optionally connect this repo for code-level diagnostics.
-3. Run `load_generation.py --mode remote --url <deployment-url>` to populate traces.
-4. Wait up to ~20 minutes for the first Engine scan.
-5. In the Engine tab you should see distinct clusters matching the planted error modes, each with a proposed fix, a suggested evaluator, and offline examples you can add to a dataset.
+2. Set priorities to **Tool Call Failures**, **Hallucinations**, **Out-of-Scope**, and a custom phrase for the PII leak (e.g. "agent reads back customer SSN, card number, CVV, phone, or email in plain text"). Hallucinations and the PII leak are the two you'll fix on stage; the rest surface the other planted error modes. Without explicit priorities, Engine ranks issues against a default rubric that may not surface what you want.
+3. **Connect your fork** so Engine's "Open PR" works (required for the PII fix beat).
+4. Run `load_generation.py --mode remote --url <deployment-url>` to populate traces.
+5. Wait up to ~20 minutes for the first Engine scan.
+6. In the Engine tab you should see distinct clusters matching the planted error modes, each with a proposed fix, a suggested evaluator, and offline examples you can add to a dataset. The hallucination cluster's fix is applied in the **Context Hub** (`AGENTS.md`); the PII cluster's fix is a **GitHub PR** against `tools.py` in your fork.
 
 ## Demo walkthrough
 
@@ -180,5 +231,6 @@ Once deployed:
 2. Run the load generator: 150 mixed conversations, tagged by category.
 3. In LangSmith, filter traces by tag to show the planted error modes are present.
 4. Open the **Engine** tab; show the clusters Engine produced, the proposed fixes, and the auto-generated dataset examples.
-5. Show the golden dataset and the offline experiment in **Datasets & Experiments** — the two LLM-as-judge scores are visible per run.
-6. Close the loop: open one Engine-proposed evaluator, deploy it, and explain that future regressions will be auto-detected against this exact dataset.
+5. Show the **two fix surfaces**: fix the hallucination by editing `AGENTS.md` in the **Context Hub** (no redeploy — the agent pulls the new version), and let Engine open a **GitHub PR** for the PII leak in `tools.py`. Optionally open the Context Hub to show the show-only skills library alongside the agent.
+6. Show the golden dataset and the offline experiment in **Datasets & Experiments** — the two LLM-as-judge scores are visible per run.
+7. Close the loop: open one Engine-proposed evaluator, deploy it, and explain that future regressions will be auto-detected against this exact dataset.

@@ -1,6 +1,6 @@
 # Demo runbook
 
-Rehearsal-ready clean-slate procedure for the LangSmith Engine demo. Read top to bottom before tearing anything down.
+Rehearsal-ready clean-slate procedure for the LangSmith Engine demo. Read top to bottom before tearing anything down. For what the demo *is*, initial setup, and how the pieces fit together, see the [README](README.md) — this file is the day-of operational runbook, not a concepts doc.
 
 ## 0. Before you delete anything
 
@@ -8,8 +8,8 @@ A safety pass that takes under five minutes.
 
 - [ ] **Confirm the dataset snapshots are committed.** They survive any LangSmith wipe.
   ```bash
-  jq '.name, (.examples | length)' evals/engine_dataset.json evals/engine_dataset_pii.json
-  # expect: banking-concierge-hallucinations / 7 ; banking-concierge-pii / 16
+  jq '.name, (.examples | length)' evals/dataset_hallucinations.json evals/dataset_pii.json
+  # expect: banking-concierge-hallucinations / 12 ; banking-concierge-pii / 16
   ```
 - [ ] **Screenshot the current Engine issue pages** (diagnosis text, proposed fix, suggested evaluator, "Add offline examples" dialog). Engine regenerates this text per scan and may phrase things differently on the next pass — useful as a backup for the slides.
 - [ ] **Screenshot the Engine-generated PRs** (`issues-agent/<uuid>` branches). The PR URLs and inline review comments will 404 once the run-level traces they cite are gone.
@@ -18,11 +18,12 @@ A safety pass that takes under five minutes.
 
 ## 1. Safe to delete in LangSmith
 
-- All traces in the tracing project (default: `banking-concierge`; legacy: `banking-concierge` if it still exists).
+- All traces in the tracing project (default: `banking-concierge`).
 - Datasets: `banking-concierge-golden`, `banking-concierge-hallucinations`, `banking-concierge-pii`.
 - Every experiment under those datasets.
 - Every Engine-detected issue on the project.
 - Annotation queues if any.
+- Context Hub demo repos: `banking-concierge-agent` plus the show-only `banking-concierge-*` skill repos. Delete and recreate these for a true fresh demo so the prompt history starts clean and the baseline `AGENTS.md` is promoted to `production`.
 
 ## 2. Do NOT touch
 
@@ -38,14 +39,29 @@ Run these in order from the project root.
 
 ### 3a. Make sure the deployment is on `main`
 
-The current `main` carries the **pre-fix** versions of `src/concierge/prompts.py` and `src/concierge/tools.py`. That's exactly what we want — a leaky baseline agent for Engine to find issues in.
+The baseline carries **two pre-fix bugs on two different fix surfaces** — that's exactly what we want, and it's the point of the demo: Engine recommends a fix in whichever surface the bug lives in.
 
-What "pre-fix" means in each file:
-
-- **`prompts.py`** — has a "Tone and confidence" paragraph that *actively* pushes the agent to give specific numbers (APYs, fees, cutoffs, basis points) from training-time knowledge when retrieval misses, and bans hedge phrases like "I'm not sure" or "I couldn't find that". This is stronger than just "loose" — gpt-4o-mini hedges by default, and a merely permissive prompt didn't produce enough hallucinations for Engine to cluster on. The fix PR replaces this paragraph with strict grounding rules.
-- **`tools.py`** — `account_lookup` returns the full customer record verbatim (SSN, full card number, CVV, phone, email). The fix PR masks these at the tool boundary (`ssn_last4`, card `last4` only, `email_masked`).
+- **Hallucination — lives in LangSmith Context Hub (`AGENTS.md`).** The system prompt is seeded into Context Hub (see 3a-bis) with a "Tone and confidence" paragraph that *actively* pushes the agent to give specific numbers (APYs, fees, cutoffs, basis points) from training-time knowledge when retrieval misses, and bans hedge phrases like "I'm not sure" or "I couldn't find that". This is stronger than just "loose" — gpt-4o-mini hedges by default, and a merely permissive prompt didn't produce enough hallucinations for Engine to cluster on. **The fix is applied by editing `AGENTS.md` in the Context Hub UI — no code redeploy.** `src/concierge/prompts.py` holds the same text only as the seed + offline fallback.
+- **PII leak — lives in `src/concierge/tools.py`.** `account_lookup` returns the full customer record verbatim (SSN, full card number, CVV, phone, email). **The fix is a GitHub PR** that masks these at the tool boundary (`ssn_last4`, card `last4` only, `email_masked`).
 
 Combined effect: the deployed baseline confidently invents specific banking numbers when asked off-KB, and reads PII back in plain text when asked. Both are reliable failure clusters.
+
+### 3a-bis. Rebuild Context Hub
+
+The agent pulls its system prompt (`AGENTS.md`) from Context Hub at runtime. For a clean demo reset, delete and recreate the demo Context Hub repos before deploying:
+
+```bash
+uv run python -m scripts.teardown_context_hub --yes
+uv run python -m scripts.setup_context_hub
+```
+
+`teardown_context_hub` deletes the `banking-concierge-agent` agent repo and the show-only `banking-concierge-*` skill repos, including their commits and tags. `setup_context_hub` recreates them, commits the baseline buggy `AGENTS.md`, and tags that initial prompt commit as `production` so the runtime resolves the clean baseline.
+
+If you only need to seed a brand-new workspace, run setup by itself:
+
+```bash
+uv run python -m scripts.setup_context_hub
+```
 
 ```bash
 git checkout main
@@ -58,13 +74,11 @@ If you can skip the redeploy because the agent is already running pre-fix code, 
 ### 3b. Recreate datasets
 
 ```bash
-# Hand-authored golden dataset (7 examples, defined in code)
-uv run python evals/golden_dataset.py --reset
-
-# Engine-generated assertion datasets (restored from snapshots)
-uv run python evals/engine_dataset.py restore --reset
-uv run python evals/engine_dataset.py restore --reset \
-    --name banking-concierge-pii --path evals/engine_dataset_pii.json
+# Restore each dataset from its committed snapshot. The positional choice
+# picks the dataset name + snapshot file (golden / hallucinations / pii).
+uv run python evals/dataset_snapshot.py restore golden --reset
+uv run python evals/dataset_snapshot.py restore hallucinations --reset
+uv run python evals/dataset_snapshot.py restore pii --reset
 ```
 
 Each prints the dataset id when done.
@@ -91,8 +105,8 @@ uv run python scripts/load_generation.py --mode remote --n 50 --only hallucinati
 In the LangSmith UI:
 
 1. **Tracing → `banking-concierge` → Engine tab → Enable.**
-2. **Settings → Priorities**: enter or select **hallucinations** *and* a custom phrase like **"agent reads back customer SSN, card number, CVV, phone, or email in plain text"**. Without explicit priorities, Engine ranks issues against a default rubric that may not surface what you want.
-3. **Connect the GitHub repository** so Engine's "Open PR" button works. Use the same connection as before.
+2. **Settings → Priorities**: enter or select **Tool Call Failures**, **Hallucinations**, **Out-of-Scope**, *and* a custom phrase like **"agent reads back customer SSN, card number, CVV, phone, or email in plain text"**. Hallucinations and the PII leak are the two you'll fix on stage; the rest surface the other planted error modes. Without explicit priorities, Engine ranks issues against a default rubric that may not surface what you want.
+3. **Connect the GitHub repository (your fork)** so Engine's "Open PR" button works — the PR lands on your fork, not the shared upstream. Use the same connection as before.
 4. **Accept the agent overview document** when it pops up. Read it — if it's wrong, edit it before accepting; Engine uses it as context for every cluster.
 
 ### 3e. Wait for the first Engine scan
@@ -103,11 +117,9 @@ While you wait:
 
 - Record the baseline locally so you have something to compare CI experiments against:
   ```bash
-  uv run python evals/run_engine_experiment.py
-  uv run python evals/run_engine_experiment.py \
-    --dataset banking-concierge-pii \
-    --experiment-prefix banking-concierge-pii-leak \
-    --evaluator assertions --evaluator pii_leak_rate
+  # Each positional choice selects its dataset, evaluator, and experiment prefix.
+  uv run python evals/run_experiment.py hallucinations
+  uv run python evals/run_experiment.py pii
   ```
 - Note the experiment names that print. You'll cite these on stage as "before fix".
 
@@ -116,15 +128,17 @@ While you wait:
 For each issue Engine surfaces (hallucinations + PII):
 
 1. Click into the issue → review the diagnosis.
-2. **Add offline examples → Add to dataset** (target `banking-concierge-hallucinations` or `banking-concierge-pii` accordingly). If Engine produces slightly different assertions than the snapshot, that's OK — the snapshot is your safety net.
-3. **Open PR** — Engine pushes a `issues-agent/<uuid>` branch with the proposed fix.
+2. **Add offline examples → Add to dataset** (target `banking-concierge-hallucinations` or `banking-concierge-pii` accordingly). If Engine produces slightly different examples than the snapshot, that's OK — the snapshot is your safety net.
+3. **Apply the fix on the right surface:**
+   - **Hallucination → Context Hub.** Engine's diagnosis points at `AGENTS.md` in the hub. Open the `banking-concierge-agent` repo in **Context → ** the Context Hub UI, edit `AGENTS.md` to replace the "answer rates from memory" paragraph with strict grounding rules, save the commit, and promote it to `production`. The deployed agent pulls the new version on its next run — no redeploy. (Restart the deployment if you pinned the prompt at import.)
+   - **PII → GitHub PR.** Click **Open PR**; Engine pushes an `issues-agent/<uuid>` branch with the `tools.py` masking fix.
 4. Mark the PR **Ready for review** if it opens as a draft (otherwise the CI workflow's `if: draft == false` skips the job).
 5. CI runs the matrix automatically (both `hallucinations` and `pii` datasets in parallel) and posts two comments per PR.
 
 ### 3g. Compare on stage
 
-- LangSmith → Datasets → `banking-concierge-hallucinations` → Compare → pick baseline + PR experiment → show per-assertion column toggling FAIL → PASS.
-- Same for `banking-concierge-pii`. The `pii_leak_rate` aggregate goes from ~0.5 to 0.0; per-assertion columns flip too.
+- LangSmith → Datasets → `banking-concierge-hallucinations` → Compare → pick baseline + PR experiment → show the `hallucination` aggregate dropping toward 0.
+- Same for `banking-concierge-pii`. The `pii_leak_rate` aggregate goes from ~0.5 to 0.0.
 
 ## 4. Optional: PII gateway demo
 
@@ -152,25 +166,62 @@ In order, top to bottom — each should take a minute:
 
 ## 6. Recovery if something breaks
 
-| Symptom | Most likely cause | Fix |
-|---|---|---|
-| `openai.RateLimitError: insufficient_quota` | OpenAI key out of budget | Top up the account, or rotate `.env`'s `OPENAI_API_KEY` to a personal key and redeploy. If using the gateway, rotate the Provider Secret instead. |
-| CI workflow skipped on a fresh PR | PR is a draft | `gh pr ready <N>` |
-| CI workflow ran but used `--evaluator assertions` only on the PII job (no `pii_leak_rate` column) | Workflow definition on `main` is stale | Make sure latest `main` is pushed; CI reads the workflow from the PR's base ref. |
-| Engine surfaces no hallucinations after 20 min | Either no hallucinations to detect (deployed agent has the strict prompt), or Engine priorities don't include them | Verify pre-fix prompt is deployed: ask the agent in chat "What's Meridian National's HELOC interest rate today?" or "How many basis points is the relationship interest bonus?" — it should commit to a specific number (the KB does not contain either, so any number is fabricated). If it answers with "I couldn't find that" or refuses to give a number, the strict prompt is live — redeploy from `main`. Then check Engine → Settings → Priorities. |
-| Frontend `/concierge/` shows the API-key prompt | Expected on a deployed instance. Paste your LangSmith API key, or open the URL once with `?api_key=lsv2_pt_…`. |
-| Frontend 403 on `/threads` | API key in localStorage is invalid | Devtools → Application → Local Storage → remove `concierge:apiKey` → reload → re-enter key. |
+**`openai.RateLimitError: insufficient_quota`**
+*Cause:* OpenAI key out of budget.
+*Fix:* Top up the account, or rotate `.env`'s `OPENAI_API_KEY` to a personal
+key and redeploy. If using the gateway, rotate the Provider Secret instead.
+
+**CI workflow skipped on a fresh PR**
+*Cause:* PR is a draft.
+*Fix:* `gh pr ready <N>`.
+
+**CI workflow ran but the PII job is missing the `pii_leak_rate` column**
+*Cause:* Workflow definition on `main` is stale.
+*Fix:* Make sure latest `main` is pushed; CI reads the workflow from the PR's
+base ref.
+
+**Engine surfaces no hallucinations after 20 min**
+*Cause:* Either no hallucinations to detect (the hub `AGENTS.md` already carries
+the strict prompt), or Engine priorities don't include them.
+*Fix:* Verify the pre-fix prompt is live: ask the agent in chat "What's Meridian
+National's HELOC interest rate today?" or "How many basis points is the
+relationship interest bonus?" — it should commit to a specific number (the KB
+does not contain either, so any number is fabricated). If it answers with "I
+couldn't find that" or refuses, the strict prompt is live in Context Hub —
+re-seed the buggy `AGENTS.md` with `uv run python -m scripts.setup_context_hub`
+(or revert the commit in the Context Hub UI) and restart the deployment. Then
+check Engine → Settings → Priorities.
+
+**Agent ignores a just-saved `AGENTS.md` edit**
+*Cause:* Prompt is pulled once at process start.
+*Fix:* Restart/redeploy the agent so `get_prompt()` re-pulls. If the hub is
+unreachable the agent silently falls back to `prompts.py` — check
+`LANGSMITH_API_KEY` / `LANGSMITH_WORKSPACE_ID`.
+
+**Frontend `/concierge/` shows the API-key prompt**
+*Cause:* Expected on a deployed instance.
+*Fix:* Paste your LangSmith API key, or open the URL once with
+`?api_key=lsv2_pt_…`.
+
+**Frontend 403 on `/threads`**
+*Cause:* API key in localStorage is invalid.
+*Fix:* Devtools → Application → Local Storage → remove `concierge:apiKey` →
+reload → re-enter key.
 
 ## 7. Quick reference
 
+Where each moving part lives. Runnable commands are inline in the rebuild steps (section 3); the README's eval sections cover the same commands with conceptual context.
+
 | What | Where |
 |---|---|
-| Hallucinations dataset snapshot | `evals/engine_dataset.json` |
-| PII dataset snapshot | `evals/engine_dataset_pii.json` |
-| Golden dataset (hand-authored) | `evals/golden_dataset.py` |
-| Baseline experiment script | `evals/run_engine_experiment.py` |
+| Golden dataset snapshot | `evals/dataset_golden.json` |
+| Hallucinations dataset snapshot | `evals/dataset_hallucinations.json` |
+| PII dataset snapshot | `evals/dataset_pii.json` |
+| Baseline experiment script | `evals/run_experiment.py` |
 | Loadgen | `scripts/load_generation.py` |
-| Pre-fix system prompt | `src/concierge/prompts.py` on `main` |
-| Pre-fix tool that leaks PII | `src/concierge/tools.py` on `main` |
+| Context Hub seeder | `scripts/setup_context_hub.py` |
+| Pre-fix system prompt (runtime) | Context Hub `banking-concierge-agent` / `AGENTS.md` (fixed in the hub UI) |
+| Pre-fix system prompt (seed/fallback) | `src/concierge/prompts.py` |
+| Pre-fix tool that leaks PII | `src/concierge/tools.py` on `main` (fixed via PR) |
 | CI workflow | `.github/workflows/evals-on-pr.yml` |
 | Required GitHub secrets | `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_WORKSPACE_ID` |

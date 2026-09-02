@@ -1,13 +1,22 @@
 """System prompts for the concierge agent.
 
-The system prompt deliberately plants a hallucination failure mode scoped to
+At runtime the concierge pulls its system prompt (``AGENTS.md``) from the
+LangSmith Context Hub via ``concierge.context.get_prompt()``. The
+``SYSTEM_PROMPT`` below is no longer the runtime source of truth — it is the
+**seed** that ``scripts/setup_context_hub.py`` pushes to the hub, and the
+**offline fallback** used when the hub is unreachable. Keep it in sync with the
+seeded ``AGENTS.md`` so the fallback matches.
+
+The prompt deliberately plants a hallucination failure mode scoped to
 interest-rate figures: it tells the agent NOT to call search_banking_docs for
 APYs/APRs/interest rates (framed as a "rates change daily, searching is too
 slow" shortcut) and to answer from its own "memorized" knowledge instead.
 Those figures come out ungrounded, while other questions still retrieve and
 stay grounded — yielding a partial (~40%) hallucination rate rather than a
-total one. This is what LangSmith Engine is designed to cluster on, and what
-an Engine fix PR (re-mandating retrieval-grounded rate answers) resolves.
+total one. This is what LangSmith Engine is designed to cluster on. Because the
+prompt lives in Context Hub, Engine's fix is applied by editing ``AGENTS.md`` in
+the Context Hub UI (no code redeploy) — unlike the PII leak in ``tools.py``,
+which Engine fixes via a GitHub PR.
 """
 
 SYSTEM_PROMPT = """\

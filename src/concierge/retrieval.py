@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -11,6 +12,16 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 KB_DIR = Path(__file__).parent / "kb"
+
+
+def _make_embeddings() -> OpenAIEmbeddings:
+    """Create an OpenAIEmbeddings instance."""
+    base_url = os.getenv("BASE_URL")
+    return OpenAIEmbeddings(
+        model="text-embedding-3-small",
+        base_url=base_url,
+        api_key=os.environ["LANGSMITH_API_KEY"],
+    )
 
 
 def _load_kb_documents() -> list[Document]:
@@ -31,7 +42,7 @@ def get_vector_store() -> InMemoryVectorStore:
     docs = _load_kb_documents()
     splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=80)
     chunks = splitter.split_documents(docs)
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    embeddings = _make_embeddings()
     return InMemoryVectorStore.from_documents(chunks, embeddings)
 
 

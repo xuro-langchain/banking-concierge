@@ -17,11 +17,16 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from concierge.prompts import SYSTEM_PROMPT
+from concierge.context import get_prompt
 from concierge.state import ConciergeState
 from concierge.tools import TOOLS
 
 load_dotenv(override=True)
+
+# The system prompt (AGENTS.md) is pulled from LangSmith Context Hub at module
+# import; a hub edit is picked up on the next process start. Falls back to the
+# seed in concierge.prompts.SYSTEM_PROMPT when the hub is unreachable.
+SYSTEM_PROMPT = get_prompt()
 
 
 def _make_model() -> ChatOpenAI:

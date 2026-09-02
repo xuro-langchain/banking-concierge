@@ -1,5 +1,6 @@
 import { type FC } from "react";
 import {
+  ActionBarPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
   MessagePrimitive,
@@ -32,21 +33,23 @@ export const ThreadView: FC = () => (
 
 const ThreadEmpty: FC = () => (
   <ThreadPrimitive.Empty>
-    <div className="flex flex-1 flex-col items-center justify-center py-20 text-center">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--primary)] text-[var(--primary-foreground)]">
-        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor">
+    <div className="anim-fade-in flex flex-1 flex-col items-center justify-center py-20 text-center">
+      <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--accent)] text-[var(--primary-foreground)] shadow-[0_0_40px_-8px_var(--primary)]">
+        <svg viewBox="0 0 24 24" className="h-7 w-7" fill="currentColor">
           <path d="M12 2L2 12l10 10 10-10z" />
         </svg>
       </div>
-      <h2 className="text-2xl font-semibold">Customer Service Concierge</h2>
-      <p className="mt-2 max-w-md text-sm text-[var(--muted-foreground)]">
+      <h2 className="text-2xl font-semibold tracking-tight">
+        Customer Service Concierge
+      </h2>
+      <p className="mt-2.5 max-w-md text-sm leading-relaxed text-[var(--muted-foreground)]">
         Ask about Meridian National personal banking, look up customer accounts, find a
         branch, or initiate a transfer.
       </p>
-      <div className="mt-6 flex flex-wrap justify-center gap-2">
+      <div className="mt-7 flex flex-wrap justify-center gap-2">
         {SUGGESTIONS.map((s) => (
           <ThreadPrimitive.Suggestion key={s} prompt={s} asChild>
-            <button className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent-bg)] hover:text-[var(--foreground)]">
+            <button className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-xs font-medium text-[var(--muted-foreground)] transition-all hover:-translate-y-0.5 hover:border-[var(--primary)] hover:bg-[var(--primary-soft)] hover:text-[var(--foreground)]">
               {s}
             </button>
           </ThreadPrimitive.Suggestion>
@@ -64,7 +67,7 @@ const ThreadMessage: FC = () => {
 
 const UserMessage: FC = () => (
   <MessagePrimitive.Root data-role="user" className="anim-msg flex justify-end">
-    <div className="max-w-[90%] rounded-2xl rounded-br-sm bg-[var(--primary)] px-4 py-2.5 text-sm leading-relaxed text-[var(--primary-foreground)]">
+    <div className="max-w-[90%] rounded-2xl rounded-br-sm bg-[var(--primary)] px-4 py-2.5 text-sm leading-relaxed text-[var(--primary-foreground)] shadow-[0_4px_18px_-8px_var(--primary)]">
       <MessagePrimitive.Parts />
     </div>
   </MessagePrimitive.Root>
@@ -74,14 +77,14 @@ const AssistantTextPart: FC = () => {
   const part = useMessagePartText();
   if (!part.text) return null;
   return (
-    <div className="max-w-[90%] rounded-2xl rounded-bl-sm border border-[var(--border-subtle)] bg-[var(--surface)] px-4 py-2.5 text-sm leading-relaxed text-[var(--foreground)] shadow-sm">
+    <div className="max-w-[90%] rounded-2xl rounded-bl-sm border border-[var(--border-subtle)] bg-[var(--surface)] px-4 py-2.5 text-sm leading-relaxed text-[var(--foreground)] shadow-[var(--shadow-bubble)]">
       <StreamdownTextPrimitive />
     </div>
   );
 };
 
 const PulsingDots: EmptyMessagePartComponent = () => (
-  <div className="rounded-2xl rounded-bl-sm border border-[var(--border-subtle)] bg-[var(--surface)] px-4 py-2.5 text-sm shadow-sm">
+  <div className="rounded-2xl rounded-bl-sm border border-[var(--border-subtle)] bg-[var(--surface)] px-4 py-2.5 text-sm shadow-[var(--shadow-bubble)]">
     <span className="inline-flex items-center gap-1 text-[var(--muted-foreground)]">
       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current" />
       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:120ms]" />
@@ -95,7 +98,7 @@ const TOOL_RENDERERS: Record<string, ToolCallMessagePartComponent> = {};
 const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText, result }) => (
   <details className="w-full max-w-[90%] rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)] px-3 py-2 text-xs">
     <summary className="cursor-pointer">
-      <span className="rounded bg-[var(--accent-bg)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--foreground)]">
+      <span className="rounded bg-[var(--accent-bg)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--accent)]">
         tool
       </span>
       <span className="ml-2 font-medium">{toolName}</span>
@@ -113,6 +116,45 @@ const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText, result
   </details>
 );
 
+const ThumbUpIcon: FC = () => (
+  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
+    <path d="M2 21h2a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H2zM7 11v9a1 1 0 0 0 1 1h9.3a2 2 0 0 0 1.95-1.55l1.5-6.5A2 2 0 0 0 18.8 9.5H14l.7-3.6A2 2 0 0 0 12.74 3.5a1 1 0 0 0-.9.56L7.6 11z" />
+  </svg>
+);
+
+const ThumbDownIcon: FC = () => (
+  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
+    <path d="M22 3h-2a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2zM17 13V4a1 1 0 0 0-1-1H6.7a2 2 0 0 0-1.95 1.55l-1.5 6.5A2 2 0 0 0 5.2 14.5H10l-.7 3.6a2 2 0 0 0 1.96 2.4 1 1 0 0 0 .9-.56L16.4 13z" />
+  </svg>
+);
+
+/**
+ * Thumbs up/down for the assistant reply. The buttons drive assistant-ui's
+ * built-in FeedbackAdapter (wired in RuntimeProvider), which resolves the
+ * LangSmith run_id and records the score. `data-submitted` is toggled by the
+ * primitive once a choice is made, so the active button stays highlighted.
+ */
+const FeedbackBar: FC = () => (
+  <ActionBarPrimitive.Root
+    hideWhenRunning
+    autohide="not-last"
+    className="ml-1 flex items-center gap-1 text-[var(--muted-foreground)]"
+  >
+    <ActionBarPrimitive.FeedbackPositive
+      aria-label="Good response"
+      className="rounded-md p-1.5 transition-colors hover:bg-[var(--accent-bg)] hover:text-[var(--accent)] data-[submitted=true]:bg-[var(--accent-bg)] data-[submitted=true]:text-[var(--accent)]"
+    >
+      <ThumbUpIcon />
+    </ActionBarPrimitive.FeedbackPositive>
+    <ActionBarPrimitive.FeedbackNegative
+      aria-label="Bad response"
+      className="rounded-md p-1.5 transition-colors hover:bg-[var(--danger-bg)] hover:text-[var(--danger)] data-[submitted=true]:bg-[var(--danger-bg)] data-[submitted=true]:text-[var(--danger)]"
+    >
+      <ThumbDownIcon />
+    </ActionBarPrimitive.FeedbackNegative>
+  </ActionBarPrimitive.Root>
+);
+
 const AssistantMessage: FC = () => (
   <MessagePrimitive.Root
     data-role="assistant"
@@ -126,9 +168,10 @@ const AssistantMessage: FC = () => (
         tools: { by_name: TOOL_RENDERERS, Fallback: ToolFallback },
       }}
     />
-    <ErrorPrimitive.Root className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700">
+    <ErrorPrimitive.Root className="rounded-md border border-[var(--danger-border)] bg-[var(--danger-bg)] px-2 py-1 text-xs text-[var(--danger)]">
       <ErrorPrimitive.Message />
     </ErrorPrimitive.Root>
+    <FeedbackBar />
   </MessagePrimitive.Root>
 );
 
@@ -143,12 +186,12 @@ export const Composer: FC = () => (
           className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-[var(--muted-foreground)]"
         />
         <ThreadPrimitive.If running={false}>
-          <ComposerPrimitive.Send className="rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-50">
+          <ComposerPrimitive.Send className="rounded-lg bg-[var(--primary)] px-3.5 py-1.5 text-xs font-medium text-[var(--primary-foreground)] transition-colors hover:bg-[var(--primary-hover)] disabled:opacity-40">
             Send
           </ComposerPrimitive.Send>
         </ThreadPrimitive.If>
         <ThreadPrimitive.If running>
-          <ComposerPrimitive.Cancel className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:bg-[var(--accent-bg)]">
+          <ComposerPrimitive.Cancel className="rounded-lg border border-[var(--border)] px-3.5 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--primary)] hover:text-[var(--foreground)]">
             Stop
           </ComposerPrimitive.Cancel>
         </ThreadPrimitive.If>
