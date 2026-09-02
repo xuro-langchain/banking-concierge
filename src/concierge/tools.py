@@ -13,6 +13,8 @@ to cluster after the load generator runs:
 
 from __future__ import annotations
 
+import re
+
 from langchain_core.tools import tool
 
 from concierge.mock_data import (
@@ -42,23 +44,84 @@ def search_banking_docs(query: str, k: int = 4) -> str:
     return "\n\n---\n\n".join(blocks)
 
 
+CUSTOMER_ID_PATTERN = re.compile(r"^CUST-\d{4}$")
+
+
+def _digits(value: str) -> str:
+    return "".join(ch for ch in value if ch.isdigit())
+
+
+@tool
+def resolve_customer(identifier: str) -> dict:
+    """Resolve a caller identifier (SSN, card number, phone, or email) to a customer ID.
+
+    Args:
+        identifier: An SSN, credit card number, phone number, or email address
+            given by the representative.
+
+    Returns {"match": True, "customer_id": "CUST-####"} only when the
+    identifier matches exactly one customer on file, otherwise
+    {"match": False}. No other customer fields are ever returned.
+    """
+    needle = identifier.strip().lower()
+    needle_digits = _digits(needle)
+    matches: set[str] = set()
+    for customer_id, customer in CUSTOMERS.items():
+        if needle and needle == customer["email"].strip().lower():
+            matches.add(customer_id)
+            continue
+        if not needle_digits:
+            continue
+        on_file = [customer["ssn"], customer["phone"]]
+        on_file += [card["number"] for card in customer["credit_cards"]]
+        if any(needle_digits == _digits(value) for value in on_file):
+            matches.add(customer_id)
+    if len(matches) != 1:
+        return {
+            "match": False,
+            "message": (
+                "That identifier does not resolve to exactly one customer on "
+                "file. Ask the representative for the caller's CUST-#### "
+                "customer ID."
+            ),
+        }
+    return {"match": True, "customer_id": matches.pop()}
+
+
 @tool
 def account_lookup(customer_id: str) -> dict:
-    """Look up account information.
+    """Look up account information for a known customer ID.
+
+    Args:
+        customer_id: A literal CUST-#### identifier the representative
+            supplied, or one returned by resolve_customer. Never construct
+            this value from an SSN, card number, phone number, or email, and
+            never guess or enumerate IDs (CUST-0001, CUST-0002, ...) to find a
+            matching name — use resolve_customer for a caller identifier, and
+            ask the representative for the ID when it cannot be resolved.
 
     Returns the customer's name and a list of their account IDs, account
-    types, and balances. Use this when the user wants details about an
-    account.
+    types, and balances.
     """
     if customer_id.startswith("X"):
         raise RuntimeError(
             "Customer record service is temporarily unavailable. Try again later."
         )
+    if not CUSTOMER_ID_PATTERN.match(customer_id):
+        raise ValueError(
+            f"{customer_id!r} is not a customer ID. customer_id must be a "
+            "literal CUST-#### identifier provided by the representative or "
+            "returned by resolve_customer. It must never be derived from an "
+            "SSN, card number, phone number, or email, and must never be "
+            "guessed or enumerated. Call resolve_customer with the caller's "
+            "identifier, or ask the representative for the CUST-#### ID."
+        )
     customer = CUSTOMERS.get(customer_id)
     if customer is None:
         raise ValueError(
-            f"No customer found with ID {customer_id!r}. "
-            "Customer IDs are in the format CUST-####."
+            f"No customer found with ID {customer_id!r}. Do not try other IDs "
+            "to find a matching name — ask the representative for the "
+            "caller's CUST-#### customer ID."
         )
     return dict(customer)
 
@@ -131,6 +194,7 @@ def transfer_funds(from_account: str, to_account: str, amount: float) -> dict:
 
 TOOLS = [
     search_banking_docs,
+    resolve_customer,
     account_lookup,
     recent_transactions,
     find_branch,
