@@ -22,6 +22,12 @@ class Transaction(TypedDict):
     type: str
 
 
+class BranchVisit(TypedDict):
+    date: str
+    branch: str
+    purpose: str
+
+
 class Branch(TypedDict):
     name: str
     address: str
@@ -145,6 +151,31 @@ TRANSACTIONS: dict[str, list[Transaction]] = {
     "CUST-0005": [
         {"date": "2026-05-21", "description": "RENT", "amount": -1500.00, "type": "debit"},
         {"date": "2026-05-20", "description": "DOORDASH", "amount": -22.18, "type": "debit"},
+    ],
+}
+
+
+# Visits are stored newest-first per customer. CUST-0003 is a digital-only
+# account holder with no in-person history.
+BRANCH_VISITS: dict[str, list[BranchVisit]] = {
+    "CUST-0001": [
+        {"date": "2026-05-18", "branch": "Meridian National - Market & 5th", "purpose": "Cashier's check pickup"},
+        {"date": "2026-04-02", "branch": "Meridian National - Embarcadero Center", "purpose": "Notary appointment"},
+        {"date": "2026-01-27", "branch": "Meridian National - Market & 5th", "purpose": "Debit card replacement"},
+    ],
+    "CUST-0002": [
+        {"date": "2026-05-11", "branch": "Meridian National - Midtown Manhattan", "purpose": "Safe deposit box access"},
+        {"date": "2026-03-19", "branch": "Meridian National - Midtown Manhattan", "purpose": "Mortgage document drop-off"},
+    ],
+    "CUST-0003": [],
+    "CUST-0004": [
+        {"date": "2026-05-20", "branch": "Meridian National - West Loop Chicago", "purpose": "Wire transfer authorization"},
+        {"date": "2026-05-04", "branch": "Meridian National - West Loop Chicago", "purpose": "Private banker review"},
+        {"date": "2026-02-11", "branch": "Meridian National - Midtown Manhattan", "purpose": "Trust account signature update"},
+    ],
+    "CUST-0005": [
+        {"date": "2026-05-15", "branch": "Meridian National - Downtown Austin", "purpose": "Overdraft fee dispute"},
+        {"date": "2026-02-28", "branch": "Meridian National - Downtown Austin", "purpose": "New account opening"},
     ],
 }
 
