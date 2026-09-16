@@ -22,6 +22,14 @@ class Transaction(TypedDict):
     type: str
 
 
+class AccountApplication(TypedDict):
+    application_id: str
+    customer_id: str | None
+    applicant_name: str
+    account_type: str
+    status: str
+
+
 class Branch(TypedDict):
     name: str
     address: str
@@ -147,6 +155,47 @@ TRANSACTIONS: dict[str, list[Transaction]] = {
         {"date": "2026-05-20", "description": "DOORDASH", "amount": -22.18, "type": "debit"},
     ],
 }
+
+
+# Deposit products a rep can open, with the minimum opening deposit published
+# in kb/account_opening.md, kb/checking_accounts.md and kb/savings_accounts.md.
+DEPOSIT_PRODUCTS: dict[str, float] = {
+    "Everyday Checking": 25.00,
+    "Clear Access Banking": 25.00,
+    "Prime Checking": 25.00,
+    "Premier Checking": 25.00,
+    "Way2Save Savings": 25.00,
+    "Platinum Savings": 25.00,
+}
+
+
+ACCOUNT_APPLICATIONS: dict[str, AccountApplication] = {}
+
+
+def match_deposit_products(account_type: str) -> list[str]:
+    """Return the deposit products matching account_type, exactly or by substring."""
+    normalized = " ".join(account_type.split()).casefold()
+    if not normalized:
+        return []
+    for product in DEPOSIT_PRODUCTS:
+        if product.casefold() == normalized:
+            return [product]
+    return [p for p in DEPOSIT_PRODUCTS if normalized in p.casefold()]
+
+
+def record_account_application(
+    customer_id: str | None, account_type: str, applicant_name: str
+) -> AccountApplication:
+    """Record a started deposit account application and return it."""
+    application: AccountApplication = {
+        "application_id": f"MNB-APP-{len(ACCOUNT_APPLICATIONS) + 1:05d}",
+        "customer_id": customer_id,
+        "applicant_name": applicant_name,
+        "account_type": account_type,
+        "status": "application_started",
+    }
+    ACCOUNT_APPLICATIONS[application["application_id"]] = application
+    return application
 
 
 BRANCHES: list[Branch] = [

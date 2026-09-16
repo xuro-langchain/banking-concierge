@@ -18,8 +18,11 @@ from langchain_core.tools import tool
 from concierge.mock_data import (
     BRANCHES,
     CUSTOMERS,
+    DEPOSIT_PRODUCTS,
     TRANSACTIONS,
     find_branch_by_zip,
+    match_deposit_products,
+    record_account_application,
 )
 from concierge.retrieval import retrieve
 
@@ -129,10 +132,54 @@ def transfer_funds(from_account: str, to_account: str, amount: float) -> dict:
     }
 
 
+@tool
+def start_account_application(
+    customer_id: str | None, account_type: str, applicant_name: str
+) -> dict:
+    """Start an application for a new Meridian National deposit account.
+
+    Args:
+        customer_id: The existing customer ID (e.g. CUST-0001), or null for a prospective customer with no record on file.
+        account_type: The deposit product to open, e.g. "Way2Save Savings", "Platinum Savings", "Everyday Checking", "Clear Access Banking", "Prime Checking", "Premier Checking".
+        applicant_name: The applicant's full name.
+    """
+    if not applicant_name.strip():
+        raise ValueError("applicant_name is required to start an application.")
+    matches = match_deposit_products(account_type)
+    if len(matches) != 1:
+        candidates = matches or list(DEPOSIT_PRODUCTS)
+        raise ValueError(
+            f"Cannot start an application for account_type {account_type!r}. "
+            f"Ask the representative which of these deposit products the caller "
+            f"wants and call this tool again: {', '.join(candidates)}."
+        )
+    product = matches[0]
+    if customer_id is not None and customer_id not in CUSTOMERS:
+        raise ValueError(
+            f"No customer found with ID {customer_id!r}. Customer IDs are in the "
+            "format CUST-####. Pass customer_id=null to apply as a prospective "
+            "customer with no record on file."
+        )
+    application = record_account_application(customer_id, product, applicant_name)
+    return {
+        "status": application["status"],
+        "application_id": application["application_id"],
+        "account_type": product,
+        "minimum_opening_deposit": DEPOSIT_PRODUCTS[product],
+        "next_steps": [
+            "Collect government-issued photo ID, SSN or ITIN, date of birth, and current physical U.S. address.",
+            "Confirm an email address and U.S. mobile number for the applicant.",
+            f"Fund the account with the ${DEPOSIT_PRODUCTS[product]:,.2f} minimum opening deposit from an existing Meridian National account, another bank's debit/credit card, or an external ACH transfer.",
+            "Welcome packet and debit card arrive within 5-7 business days; the applicant then activates the card and enrolls in online banking.",
+        ],
+    }
+
+
 TOOLS = [
     search_banking_docs,
     account_lookup,
     recent_transactions,
     find_branch,
     transfer_funds,
+    start_account_application,
 ]
