@@ -176,22 +176,22 @@ const AssistantMessage: FC = () => (
 );
 
 export const Composer: FC = () => (
-  <div className="border-t border-[var(--border)] bg-[var(--background)] px-3 py-3 sm:px-6 sm:py-4">
+  <div className="border-t border-[var(--border)] bg-[var(--background)] px-3 pt-3 pb-4 sm:px-6 sm:pt-4 sm:pb-6">
     <div className="mx-auto w-full max-w-3xl">
-      <ComposerPrimitive.Root className="composer flex items-end gap-2 px-3 py-2.5">
+      <ComposerPrimitive.Root className="composer flex items-end gap-2 py-2 pl-4 pr-2">
         <ComposerPrimitive.Input
           autoFocus
           rows={1}
           placeholder="Message the concierge…"
-          className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-[var(--muted-foreground)]"
+          className="flex-1 resize-none bg-transparent py-1.5 text-sm leading-5 outline-none placeholder:text-[var(--muted-foreground)]"
         />
         <ThreadPrimitive.If running={false}>
-          <ComposerPrimitive.Send className="rounded-lg bg-[var(--primary)] px-3.5 py-1.5 text-xs font-medium text-[var(--primary-foreground)] transition-colors hover:bg-[var(--primary-hover)] disabled:opacity-40">
+          <ComposerPrimitive.Send className="rounded-lg bg-[var(--primary)] px-3.5 py-2 text-xs leading-4 font-medium text-[var(--primary-foreground)] transition-colors hover:bg-[var(--primary-hover)] disabled:opacity-40">
             Send
           </ComposerPrimitive.Send>
         </ThreadPrimitive.If>
         <ThreadPrimitive.If running>
-          <ComposerPrimitive.Cancel className="rounded-lg border border-[var(--border)] px-3.5 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--primary)] hover:text-[var(--foreground)]">
+          <ComposerPrimitive.Cancel className="rounded-lg border border-[var(--border)] px-3.5 py-2 text-xs leading-4 font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--primary)] hover:text-[var(--foreground)]">
             Stop
           </ComposerPrimitive.Cancel>
         </ThreadPrimitive.If>
