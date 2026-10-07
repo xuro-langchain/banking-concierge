@@ -1,10 +1,13 @@
-# Python-generated files (anchored to repo root; otherwise `dist/` would
-# also match frontend/dist/, which langgraph deploy needs to ship).
+# Python-generated files
 __pycache__/
 *.py[oc]
-/build/
-/dist/
-/wheels/
+build/
+dist/
+wheels/
+# ...but the built frontend bundle must ship in the deployment image.
+# `langgraph deploy` filters its upload with THIS file only (nested
+# .gitignore files are not read), so the negation has to live here.
+!frontend/dist/
 *.egg-info
 
 # Virtual environments
