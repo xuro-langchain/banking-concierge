@@ -72,7 +72,7 @@ export const submitFeedback = async (
   ctx: ChatApiContext,
   params: { runId: string; score: FeedbackScore; comment?: string },
 ): Promise<void> => {
-  const res = await fetch(new URL("/concierge-api/feedback", ctx.apiUrl), {
+  const res = await fetch(`${ctx.apiUrl.replace(/\/$/, "")}/concierge-api/feedback`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -1,3 +1,4 @@
+import { agentApiUrl } from "./lib/agents";
 import { useMemo, useRef, type ReactNode } from "react";
 import {
   AssistantRuntimeProvider,
@@ -71,12 +72,12 @@ export function RuntimeProvider({
   children,
 }: Props) {
   const ctxRef = useRef<ChatApiContext>({
-    apiUrl: window.location.origin,
+    apiUrl: agentApiUrl(),
     assistantId,
     apiKey,
   });
   ctxRef.current = {
-    apiUrl: window.location.origin,
+    apiUrl: agentApiUrl(),
     assistantId,
     apiKey,
   };

@@ -3,6 +3,29 @@ import { RuntimeProvider } from "./RuntimeProvider";
 import { Composer, ThreadView } from "./components/Thread";
 import ApiKeyGate from "./components/ApiKeyGate";
 import { isLocalDev, resolveApiKey, saveApiKey } from "./lib/auth";
+import { AGENTS, chooseAgent, currentAgent } from "./lib/agents";
+
+/** Which workspace's agent to talk to. Only on the dev server, where vite.config.ts proxies each one. */
+const AgentSwitch: FC = () => {
+  const current = currentAgent();
+  if (!current) return null;
+  return (
+    <label className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+      Agent
+      <select
+        value={current.id}
+        onChange={(e) => chooseAgent(e.target.value)}
+        className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs text-[var(--foreground)]"
+      >
+        {AGENTS.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+};
 
 const Header: FC = () => (
   <header className="header-blur sticky top-0 z-30 flex items-center justify-between border-b border-[var(--border)] px-4 py-3 sm:px-6">
@@ -21,10 +44,13 @@ const Header: FC = () => (
         </p>
       </div>
     </div>
-    <span className="hidden items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs text-[var(--muted-foreground)] sm:inline-flex">
-      <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
-      LangSmith Engine demo
-    </span>
+    <div className="flex items-center gap-3">
+      <AgentSwitch />
+      <span className="hidden items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs text-[var(--muted-foreground)] sm:inline-flex">
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" />
+        LangSmith Engine demo
+      </span>
+    </div>
   </header>
 );
 
