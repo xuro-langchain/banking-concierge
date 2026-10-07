@@ -2,11 +2,11 @@ import { useMemo, useRef, type ReactNode } from "react";
 import {
   AssistantRuntimeProvider,
   getExternalStoreMessages,
+  useAuiState,
   type FeedbackAdapter,
 } from "@assistant-ui/react";
 import {
   useLangGraphRuntime,
-  useLangGraphMessageMetadata,
   type LangChainMessage,
   type LangGraphTupleMetadata,
 } from "@assistant-ui/react-langgraph";
@@ -155,6 +155,13 @@ function MetadataSync({
 }: {
   mapRef: React.MutableRefObject<Map<string, LangGraphTupleMetadata>>;
 }) {
-  mapRef.current = useLangGraphMessageMetadata();
+  mapRef.current = useAuiState(
+    (s) => (s.thread.extras as { messageMetadata?: Map<string, LangGraphTupleMetadata> } | undefined)
+      ?.messageMetadata ?? NO_METADATA,
+  );
   return null;
 }
+
+// One shared empty map. The library's useLangGraphMessageMetadata returns a new Map on every
+// read until the thread loads, which React treats as a change, so it re-renders forever.
+const NO_METADATA = new Map<string, LangGraphTupleMetadata>();
